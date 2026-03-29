@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model FeedItem {
+  id           String       @id @default(uuid())
+  name         String       @unique
+  category     FeedCategory
+  currentStock Int          @default(0)
+  pricePerUnit Decimal?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id       String          @id @default(uuid())
+  type     TransactionType
+  quantity Int
+  date     DateTime        @default(now())
+  notes    String?
+
+  feedItemId String
+  feedItem   FeedItem @relation(fields: [feedItemId], references: [id])
+}
+
+enum TransactionType {
+  IN
+  OUT
+}
+
+enum FeedCategory {
+  PULLET_RATION
+  BROILER_RATION
+  CONCENTRATE
+  PREMIUM_BROILER
+  BROILER_PLUS_PRO
+  FISH_FEED
+  OMEGA_FISH_FEED
+}
