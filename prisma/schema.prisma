@@ -34,7 +34,7 @@ model User {
 model FeedItem {
   id           String       @id @default(uuid())
   name         String       @unique
-  category     FeedCategory
+  category     String
   currentStock Int          @default(0)
   pricePerUnit Decimal?
   createdAt    DateTime     @default(now())
@@ -61,16 +61,6 @@ model Transaction {
 enum TransactionType {
   IN
   OUT
-}
-
-enum FeedCategory {
-  PULLET_RATION
-  BROILER_RATION
-  CONCENTRATE
-  PREMIUM_BROILER
-  BROILER_PLUS_PRO
-  FISH_FEED
-  OMEGA_FISH_FEED
 }
 
 enum Role {

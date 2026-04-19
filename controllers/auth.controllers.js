@@ -120,6 +120,36 @@ export const signIn = async (req, res) => {
     });
 };
 
+// controllers/auth.controllers.js
+
+export const getMe = async (req, res) => {
+        // Since this route is protected, your verifyToken middleware 
+        // will have already grabbed the ID from the token and attached it to req.user
+        const userId = req.user.id;
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phoneNumber: true,
+                role: true,
+                isActive: true,
+                createdAt: true
+                // Notice we specifically DO NOT include passwordHash here!
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: "User profile not found." });
+        }
+
+        // Send the clean profile data back to the frontend
+        res.status(200).json(user);
+};
+
 
 
 
