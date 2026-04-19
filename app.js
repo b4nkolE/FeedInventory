@@ -1,15 +1,29 @@
 import express from "express"
 import {PORT} from "./config/env.js"
 import { connectDb, disconnectDB } from "./database/postgres.js";
+import authRouter from "./routes/auth.routes.js";
+import inventoryRouter from "./routes/inventory.routes.js"
 
 
 
 
 
 const app = express();
+app.use(express.json())
 
 
-app.listen(PORT, () => {
+app.use("/api/v1/users", authRouter);
+app.use("/api/v1/inventory", inventoryRouter);
+
+
+
+app.use((err, req, res, next) => {
+    console.log(err),
+    res.status(500).json({message: "Something went wrong", err: err.message});
+});
+
+
+const httpServer = app.listen(PORT, () => {
     console.log("server is running");
     connectDb();
 });

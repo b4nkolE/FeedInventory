@@ -9,8 +9,26 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String  @id @default(uuid())
+  firstName    String
+  lastName     String
+  passwordHash String
+  email        String  @unique
+  phoneNumber  String?
+
+  role     Role    @default(STAFF)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
 }
 
 model FeedItem {
@@ -26,14 +44,18 @@ model FeedItem {
 }
 
 model Transaction {
-  id       String          @id @default(uuid())
-  type     TransactionType
-  quantity Int
-  date     DateTime        @default(now())
-  notes    String?
+  id        String          @id @default(uuid())
+  type      TransactionType
+  quantity  Int
+  date      DateTime        @default(now())
+  notes     String?
+  reference String?
 
   feedItemId String
   feedItem   FeedItem @relation(fields: [feedItemId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 }
 
 enum TransactionType {
@@ -49,4 +71,10 @@ enum FeedCategory {
   BROILER_PLUS_PRO
   FISH_FEED
   OMEGA_FISH_FEED
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
 }
