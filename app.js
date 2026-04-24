@@ -3,7 +3,8 @@ import {PORT} from "./config/env.js"
 import { connectDb, disconnectDB } from "./database/postgres.js";
 import authRouter from "./routes/auth.routes.js";
 import inventoryRouter from "./routes/inventory.routes.js"
-
+import analyticsRouter from "./routes/analytics.routes.js"
+import userRouter from "./routes/users.routes.js"
 
 
 
@@ -14,6 +15,8 @@ app.use(express.json())
 
 app.use("/api/v1/users", authRouter);
 app.use("/api/v1/inventory", inventoryRouter);
+app.use('/api/v1/analytics', analyticsRouter);
+app.use('/api/v1/users', userRouter)
 
 
 

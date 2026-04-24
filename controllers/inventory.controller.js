@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from "../database/postgres.js";
 
-const prisma = new PrismaClient();
 
 export const recordTransaction = async (req, res) => {
     // 1. Get the data from the request body
@@ -189,3 +188,108 @@ export const updateFeedItem = async (req, res) => {
         feed: updatedFeed
     });
 };
+
+// controllers/inventoryController.js
+
+export const getAllTransactions = async (req, res) => {
+    // 1. Grab the optional query parameters from the URL
+    // e.g., ?type=IN&startDate=2026-04-01
+    const { type, startDate, endDate, feedItemId } = req.query;
+
+    // 2. Build a dynamic filter object
+    let queryFilter = {};
+
+    if (type) {
+        queryFilter.type = type.toUpperCase(); // Ensure it matches 'IN' or 'OUT'
+    }
+    
+    if (feedItemId) {
+        queryFilter.feedItemId = feedItemId;
+    }
+
+    // 3. Handle date ranges if the frontend provided them
+    if (startDate || endDate) {
+        queryFilter.date = {};
+        if (startDate) queryFilter.date.gte = new Date(startDate); // Greater than or equal to
+        if (endDate) queryFilter.date.lte = new Date(endDate);     // Less than or equal to
+    }
+
+    // 4. Fetch the ledger from the database
+    const transactions = await prisma.transaction.findMany({
+        where: queryFilter,
+        orderBy: {
+            date: 'desc' // Always show the newest transactions at the top!
+        },
+        include: {
+            // Automatically fetch the related feed name and category
+            feedItem: {
+                select: { name: true, category: true }
+            },
+            // Automatically fetch the staff member's name
+            user: {
+                select: { firstName: true, lastName: true }
+            }
+        }
+    });
+
+    // 5. Return the heavily detailed list
+    res.status(200).json(transactions);
+};
+
+// controllers/inventoryController.js
+
+// export const getTransactionsByFeedId = async (req, res) => {
+//     // 1. Grab the Feed ID from the URL path
+//     const { feedItemId } = req.params;
+    
+//     // 2. Grab optional filters from the query string (?type=IN)
+//     const { type, startDate, endDate } = req.query;
+
+//     // 3. Verify the feed item actually exists first
+//     const feed = await prisma.feedItem.findUnique({
+//         where: { id: feedItemId },
+//         select: { name: true, currentStock: true } // We only need basic info
+//     });
+
+//     if (!feed) {
+//         return res.status(404).json({ error: "Feed item not found." });
+//     }
+
+//     // 4. Build the query filter, locking it to THIS specific feed
+//     let queryFilter = {
+//         feedItemId: feedItemId 
+//     };
+
+//     if (type) {
+//         queryFilter.type = type.toUpperCase();
+//     }
+
+//     if (startDate || endDate) {
+//         queryFilter.date = {}; // Using 'date' just like we fixed earlier!
+//         if (startDate) queryFilter.date.gte = new Date(startDate);
+//         if (endDate) queryFilter.date.lte = new Date(endDate);
+//     }
+
+//     // 5. Fetch the targeted history
+//     const transactions = await prisma.transaction.findMany({
+//         where: queryFilter,
+//         orderBy: {
+//             date: 'desc'
+//         },
+//         include: {
+//             // We don't need to include the feedItem details here because we already know what feed it is!
+//             // We only need to know WHICH staff member did it.
+//             user: {
+//                 select: { firstName: true, lastName: true }
+//             }
+//         }
+//     });
+
+//     // 6. Return a beautifully structured response
+//     res.status(200).json({
+//         feedName: feed.name,
+//         currentStock: feed.currentStock,
+//         totalTransactions: transactions.length,
+//         history: transactions
+//     });
+// };

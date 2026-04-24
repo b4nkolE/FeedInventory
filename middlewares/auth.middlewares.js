@@ -55,3 +55,24 @@ export const verifyToken = async (req, res, next) => {
         });
     }
 };
+
+
+
+export const authorizeRoles = (...allowedRoles) => {
+    return (req, res, next) => {
+        // 1. Double-check that verifyToken actually attached a user
+        if (!req.user) {
+            return res.status(401).json({ error: "Authentication required." });
+        }
+
+        // 2. Check if the user's role is in the list of allowed roles
+        if (!allowedRoles.includes(req.user.role)) {
+            return res.status(403).json({ 
+                error: `Access denied. Requires one of the following roles: ${allowedRoles.join(', ')}` 
+            });
+        }
+
+        // 3. If they pass, send them to the controller!
+        next();
+    };
+};
