@@ -1,0 +1,379 @@
+openapi: 3.0.0
+info:
+  title: Poultry Farm Inventory & Traceability API
+  version: 1.0.0
+  description: Master API documentation for the farm's backend system, reflecting the merged Users and Authentication routing architecture.
+servers:
+  - url: http://localhost:8000
+    description: Local Development Server
+  - url:  https://gbenroglobalsynergyltd.onrender.com
+    description: Production Server
+
+# ---------------------------------------------------------
+# COMPONENTS & SCHEMAS
+# ---------------------------------------------------------
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phoneNumber:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, STAFF]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    FeedItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        currentStock:
+          type: integer
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        feedItemId:
+          type: string
+        userId:
+          type: string
+        type:
+          type: string
+          enum: [IN, OUT]
+        quantity:
+          type: integer
+        reference:
+          type: string
+        notes:
+          type: string
+        date:
+          type: string
+          format: date-time
+
+# ---------------------------------------------------------
+# PATHS (ROUTES)
+# ---------------------------------------------------------
+paths:
+  # ================= USERS & AUTHENTICATION =================
+  /api/v1/users/signup:
+    post:
+      summary: Register a new user
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, firstName, lastName]
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                phoneNumber:
+                  type: string
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          description: Bad request (missing fields or email taken)
+
+  /api/v1/users/signin:
+    post:
+      summary: Login a user
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid email or password
+        '403':
+          description: Account deactivated
+
+  /api/v1/users/me:
+    get:
+      summary: Get the currently logged-in user profile
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Returns clean profile data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /api/v1/users:
+    get:
+      summary: Get all users (Managers & Admins only)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /api/v1/users/profile:
+    put:
+      summary: Update own user profile
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                phoneNumber:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated successfully
+
+  /api/v1/users/{id}:
+    delete:
+      summary: Delete a user by ID (Hierarchy Rules Apply)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User deleted successfully
+        '403':
+          description: Permission denied due to role hierarchy
+        '404':
+          description: User not found
+
+  # ================= INVENTORY & TRANSACTIONS =================
+  /api/v1/inventory/feeds:
+    get:
+      summary: Get all feed items in the catalog
+      tags: [Inventory Catalog]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Returns sorted inventory list
+    post:
+      summary: Create a new feed product
+      tags: [Inventory Catalog]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category]
+              properties:
+                name:
+                  type: string
+                category:
+                  type: string
+      responses:
+        '201':
+          description: Feed product created
+
+  /api/v1/inventory/feeds/{id}:
+    get:
+      summary: Get a specific feed item by ID
+      tags: [Inventory Catalog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Returns the specific feed
+        '404':
+          description: Feed item not found
+    put:
+      summary: Update a specific feed item
+      tags: [Inventory Catalog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                category:
+                  type: string
+      responses:
+        '200':
+          description: Feed item updated
+
+  /api/v1/inventory/transaction:
+    post:
+      summary: Record an IN or OUT transaction
+      tags: [Traceability Ledger]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedItemId, type, quantity]
+              properties:
+                feedItemId:
+                  type: string
+                type:
+                  type: string
+                  enum: [IN, OUT]
+                quantity:
+                  type: integer
+                reference:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '201':
+          description: Transaction recorded and stock updated
+        '400':
+          description: Insufficient stock or invalid data
+
+  /api/v1/inventory/transactions:
+    get:
+      summary: Get the master transaction ledger
+      tags: [Traceability Ledger]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [IN, OUT]
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: feedItemId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Returns the full filtered ledger
+
+  # ================= ANALYTICS =================
+  /api/v1/analytics/summary:
+    get:
+      summary: Get high-level dashboard metrics
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Returns total bags, daily sales, and low stock items
+
+  /api/v1/analytics/top-selling:
+    get:
+      summary: Get leaderboard of top selling feeds
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          description: Limit number of results (defaults to 5)
+      responses:
+        '200':
+          description: Returns ranked list of feeds by OUT volume
+
+  /api/v1/analytics/admin/manager-actions:
+    get:
+      summary: Audit log of manager actions (Admin only)
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Returns transactions executed by managers
