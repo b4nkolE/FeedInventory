@@ -16,6 +16,13 @@ app.use(express.json())
 
 const swaggerDocument = YAML.load('./swagger.yaml');
 
+app.use(cors({
+    origin: ["http://localhost:8000", "https://gbenro-global-synergy.vercel.app"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    credentials: true,
+    allowedHeaders: ["Content-type", "Authorization"]
+}));
+
 
 app.use("/api/v1/users", authRouter);
 app.use("/api/v1/inventory", inventoryRouter);
