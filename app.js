@@ -7,6 +7,7 @@ import analyticsRouter from "./routes/analytics.routes.js"
 import userRouter from "./routes/users.routes.js"
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
+import cors from "cors";
 
 
 
@@ -17,12 +18,11 @@ app.use(express.json())
 const swaggerDocument = YAML.load('./swagger.yaml');
 
 app.use(cors({
-    origin: ["http://localhost:8000", "https://gbenro-global-synergy.vercel.app"],
+    origin: ["http://localhost:8000", "https://gbenro-global-synergy.vercel.app", 'http://localhost:3000', "http://localhost:3001","http://localhost:3002","https://gbenroglobalsynergyltd.onrender.com"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true,
     allowedHeaders: ["Content-type", "Authorization"]
 }));
-
 
 app.use("/api/v1/users", authRouter);
 app.use("/api/v1/inventory", inventoryRouter);
