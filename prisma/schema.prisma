@@ -31,14 +31,27 @@ model User {
   transactions Transaction[]
 }
 
+model Category {
+  id          String     @id @default(uuid())
+  name        String     @unique 
+  description String?    
+  
+  feedItems   FeedItem[] 
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
 model FeedItem {
   id           String       @id @default(uuid())
   name         String       @unique
-  category     String
   currentStock Int          @default(0)
   pricePerUnit Decimal?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   transactions Transaction[]
 }

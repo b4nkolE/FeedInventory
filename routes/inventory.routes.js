@@ -1,6 +1,6 @@
 // routes/inventoryRoutes.js
 import express from 'express';
-import { recordTransaction, getAllFeeds, getFeedById, createFeedItem, updateFeedItem, getAllTransactions } from '../controllers/inventory.controller.js';
+import { recordTransaction, getAllFeeds, getFeedById, createFeedItem, updateFeedItem, getAllTransactions} from '../controllers/inventory.controller.js';
 import { verifyToken, authorizeRoles } from '../middlewares/auth.middlewares.js';
 
 const inventoryRouter = express.Router();

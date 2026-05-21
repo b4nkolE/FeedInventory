@@ -73,16 +73,21 @@ export const recordTransaction = async (req, res) => {
 
 export const getAllFeeds = async (req, res) => {
     const feeds = await prisma.feedItem.findMany({
-        orderBy: [
-            { category: 'asc' }, // Group them by category first
-            { name: 'asc' }      // Then sort alphabetically within that category
-        ]
+        // CHANGE: Ask Prisma to fetch the related category data!
+        include: {
+            category: {
+                select: {
+                    name: true // Just grab the name of the category
+                }
+            }
+        },
+        orderBy: {
+            name: 'asc'
+        }
     });
 
-    // Send the full, sorted inventory list back
     res.status(200).json(feeds);
 };
-
 
 export const getFeedById = async (req, res) => {
     // 1. Extract the ID directly from the URL parameters
@@ -104,7 +109,7 @@ export const getFeedById = async (req, res) => {
 
 
 export const createFeedItem = async (req, res) => {
-    const { name, category } = req.body;
+    const { name, categoryId } = req.body;
 
     // 1. Basic validation
     if (!name || !category) {
@@ -128,7 +133,7 @@ export const createFeedItem = async (req, res) => {
     const newFeed = await prisma.feedItem.create({
         data: {
             name,
-            category
+            categoryId
         }
     });
 
@@ -142,7 +147,7 @@ export const createFeedItem = async (req, res) => {
 
 export const updateFeedItem = async (req, res) => {
     const { id } = req.params;
-    const { name, category } = req.body;
+    const { name, categoryId } = req.body;
 
     // 1. Ensure they actually sent something to update
     if (!name && !category) {
@@ -178,7 +183,7 @@ export const updateFeedItem = async (req, res) => {
         where: { id: id },
         data: {
             ...(name && { name }),
-            ...(category && { category })
+            ...(category && { categoryId })
         }
     });
 
@@ -191,9 +196,11 @@ export const updateFeedItem = async (req, res) => {
 
 // controllers/inventoryController.js
 
+// controllers/inventory.controller.js
+
 export const getAllTransactions = async (req, res) => {
     // 1. Grab the optional query parameters from the URL
-    // e.g., ?type=IN&startDate=2026-04-01
+    // e.g., ?type=IN&startDate=2026-04-01&feedItemId=some-uuid
     const { type, startDate, endDate, feedItemId } = req.query;
 
     // 2. Build a dynamic filter object
@@ -214,27 +221,39 @@ export const getAllTransactions = async (req, res) => {
         if (endDate) queryFilter.date.lte = new Date(endDate);     // Less than or equal to
     }
 
-    // 4. Fetch the ledger from the database
-    const transactions = await prisma.transaction.findMany({
-        where: queryFilter,
-        orderBy: {
-            date: 'desc' // Always show the newest transactions at the top!
-        },
-        include: {
-            // Automatically fetch the related feed name and category
-            feedItem: {
-                select: { name: true, category: true }
+    // 4. Fetch the ledger from the database using the dynamic filter
+    try {
+        const transactions = await prisma.transaction.findMany({
+            where: queryFilter,
+            orderBy: {
+                date: 'desc' // Always show the newest transactions at the top!
             },
-            // Automatically fetch the staff member's name
-            user: {
-                select: { firstName: true, lastName: true }
+            include: {
+                // This is the updated relation for the new Enterprise architecture
+                feedItem: {
+                    select: { 
+                        name: true, 
+                        // Go one level deeper to grab the category name
+                        category: {
+                            select: { name: true }
+                        }
+                    }
+                },
+                user: {
+                    select: { firstName: true, lastName: true }
+                }
             }
-        }
-    });
+        });
 
-    // 5. Return the heavily detailed list
-    res.status(200).json(transactions);
+        // 5. Return the heavily detailed, filtered list
+        res.status(200).json(transactions);
+        
+    } catch (error) {
+        console.error("Error fetching transactions:", error);
+        res.status(500).json({ error: "Failed to fetch transaction ledger." });
+    }
 };
+
 
 // controllers/inventoryController.js
 
@@ -293,3 +312,29 @@ export const getAllTransactions = async (req, res) => {
 //         history: transactions
 //     });
 // };
+
+
+// controllers/inventory.controller.js
+
+export const getAllCategories = async (req, res) => {
+    try {
+        // Grab everything from the new Category table
+        const categories = await prisma.category.findMany({
+            orderBy: {
+                name: 'asc' // Keeps their dropdown alphabetical!
+            },
+            select: {
+                id: true,
+                name: true
+            }
+        });
+
+        // Send the raw array of objects to the frontend
+        // Example output: [{ id: "uuid-1", name: "FISH_FEED" }, { id: "uuid-2", name: "PULLET_RATION" }]
+        res.status(200).json(categories);
+        
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch categories" });
+    }
+};
+

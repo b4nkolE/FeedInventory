@@ -1,82 +1,104 @@
-// prisma/seed.js
 import { PrismaClient } from '@prisma/client';
-
 const prisma = new PrismaClient();
 
-const feedInventory = [
-    // --- PULLET RATION ---
-    { name: 'CM', category: 'PULLET_RATION' },
-    { name: 'CCrumb', category: 'PULLET_RATION' },
-    { name: 'GM', category: 'PULLET_RATION' },
-    { name: 'GCrumb', category: 'PULLET_RATION' },
-    { name: 'PLM', category: 'PULLET_RATION' },
-    { name: 'PLayer Crumb', category: 'PULLET_RATION' },
-    { name: 'Layer Crumb', category: 'PULLET_RATION' },
-    { name: 'LM', category: 'PULLET_RATION' },
-    { name: 'Layer Wise', category: 'PULLET_RATION' },
-    { name: 'Layer phase 2', category: 'PULLET_RATION' },
-
-    // --- BROILER RATION ---
-    { name: 'BSSM', category: 'BROILER_RATION' },
-    { name: 'BSS Crumb', category: 'BROILER_RATION' },
-    { name: 'BSM', category: 'BROILER_RATION' },
-    { name: 'BS Crumb', category: 'BROILER_RATION' },
-    { name: 'BFM', category: 'BROILER_RATION' },
-    { name: 'BF Pellet', category: 'BROILER_RATION' },
-
-    // --- CONCENTRATES ---
-    { name: 'CC 30%', category: 'CONCENTRATE' },
-    { name: 'GC 30%', category: 'CONCENTRATE' },
-    { name: 'LC 30%', category: 'CONCENTRATE' },
-    { name: 'CC 40%', category: 'CONCENTRATE' },
-    { name: 'GC 40%', category: 'CONCENTRATE' },
-    { name: 'LC 40%', category: 'CONCENTRATE' },
-    { name: 'BSSC 40%', category: 'CONCENTRATE' },
-    { name: 'BSC 40%', category: 'CONCENTRATE' },
-    { name: 'BFC 40%', category: 'CONCENTRATE' },
-
-    // --- PREMIUM BROILER FEEDS ---
-    { name: 'Premium Starter Crumbs', category: 'PREMIUM_BROILER' },
-    { name: 'Premium Super Starter Crumbs', category: 'PREMIUM_BROILER' },
-    { name: 'Premium Finisher Pellets', category: 'PREMIUM_BROILER' },
-
-    // --- BROILER PLUS PRO-LINE ---
-    { name: 'Pro-Line BSS Crumbles', category: 'BROILER_PLUS_PRO' },
-    { name: 'Pro-Line BS Crumbles', category: 'BROILER_PLUS_PRO' },
-    { name: 'Pro-Line BF Pellets', category: 'BROILER_PLUS_PRO' },
-
-    // --- FISH FEEDS (Prefixed to ensure uniqueness) ---
-    { name: 'Standard Fish Feed 2mm', category: 'FISH_FEED' },
-    { name: 'Standard Fish Feed 3mm', category: 'FISH_FEED' },
-    { name: 'Standard Fish Feed 4.5mm', category: 'FISH_FEED' },
-    { name: 'Standard Fish Feed 6mm', category: 'FISH_FEED' },
-    { name: 'Standard Fish Feed 9mm', category: 'FISH_FEED' },
-
-    // --- OMEGA FISH FEEDS ---
-    { name: 'Omega Fish Feed 4.5mm', category: 'OMEGA_FISH_FEED' },
-    { name: 'Omega Fish Feed 6mm', category: 'OMEGA_FISH_FEED' },
-    { name: 'Omega Fish Feed 9mm', category: 'OMEGA_FISH_FEED' }
-];
-
 async function main() {
-    console.log('🌱 Starting database seeding...');
+    console.log("Seeding TOPFEEDS database...");
 
-    // Using createMany with skipDuplicates ensures we can run this script 
-    // multiple times without crashing if the data is already there.
-    const result = await prisma.feedItem.createMany({
-        data: feedInventory,
-        skipDuplicates: true,
+    // 1. The exact categories matching the frontend schema
+    const feedCategories = [
+        'PULLET_RATION',
+        'BROILER_RATION',
+        'CONCENTRATE',
+        'PREMIUM_BROILER',
+        'BROILER_PLUS_PRO',
+        'FISH_FEED',
+        'OMEGA_FISH_FEED'
+    ];
+
+    // This map stores the generated database IDs for the categories
+    const categoryMap = {};
+
+    // 2. Loop through and create/verify every category
+    for (const categoryName of feedCategories) {
+        const categoryRecord = await prisma.category.upsert({
+            where: { name: categoryName },
+            update: {},
+            create: { name: categoryName },
+        });
+
+        categoryMap[categoryName] = categoryRecord.id;
+        console.log(`Verified Category: ${categoryName}`);
+    }
+
+    // 3. Insert the entire TOPFEEDS physical inventory
+    console.log("Inserting feed items...");
+
+    await prisma.feedItem.createMany({
+        data: [
+            // ---------------- PULLET RATION ----------------
+            { name: "CM", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "CCrumb", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "GM", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "GCrumb", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "PLM", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "PLayer Crumb", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "Layer Crumb", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "LM", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "Layer Wise", categoryId: categoryMap['PULLET_RATION'] },
+            { name: "Layer phase 2", categoryId: categoryMap['PULLET_RATION'] },
+
+            // ---------------- BROILER RATION ----------------
+            { name: "BSSM", categoryId: categoryMap['BROILER_RATION'] },
+            { name: "BSS Crumb", categoryId: categoryMap['BROILER_RATION'] },
+            { name: "BSM", categoryId: categoryMap['BROILER_RATION'] },
+            { name: "BS Crumb", categoryId: categoryMap['BROILER_RATION'] },
+            { name: "BFM", categoryId: categoryMap['BROILER_RATION'] },
+            { name: "BF Pellet", categoryId: categoryMap['BROILER_RATION'] },
+
+            // ---------------- CONCENTRATES ----------------
+            { name: "CC 30%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "GC 30%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "LC 30%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "CC 40%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "GC 40%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "LC 40%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "BSSC 40%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "BSC 40%", categoryId: categoryMap['CONCENTRATE'] },
+            { name: "BFC 40%", categoryId: categoryMap['CONCENTRATE'] },
+
+            // ---------------- PREMIUM BROILER FEEDS ----------------
+            { name: "Premium Starter Crumbs", categoryId: categoryMap['PREMIUM_BROILER'] },
+            { name: "Premium Super Starter Crumbs", categoryId: categoryMap['PREMIUM_BROILER'] },
+            { name: "Premium Finisher Pellets", categoryId: categoryMap['PREMIUM_BROILER'] },
+
+            // ---------------- BROILER PLUS PRO-LINE ----------------
+            { name: "BSS Crumbles", categoryId: categoryMap['BROILER_PLUS_PRO'] },
+            { name: "BS Crumbles", categoryId: categoryMap['BROILER_PLUS_PRO'] },
+            { name: "BF Pellets", categoryId: categoryMap['BROILER_PLUS_PRO'] },
+
+            // ---------------- FISH FEEDS ----------------
+            { name: "Fish Feed 2mm", categoryId: categoryMap['FISH_FEED'] },
+            { name: "Fish Feed 3mm", categoryId: categoryMap['FISH_FEED'] },
+            { name: "Fish Feed 4.5mm", categoryId: categoryMap['FISH_FEED'] },
+            { name: "Fish Feed 6mm", categoryId: categoryMap['FISH_FEED'] },
+            { name: "Fish Feed 9mm", categoryId: categoryMap['FISH_FEED'] },
+
+            // ---------------- OMEGA FISH FEEDS ----------------
+            { name: "Omega Fish Feed 4.5mm", categoryId: categoryMap['OMEGA_FISH_FEED'] },
+            { name: "Omega Fish Feed 6mm", categoryId: categoryMap['OMEGA_FISH_FEED'] },
+            { name: "Omega Fish Feed 9mm", categoryId: categoryMap['OMEGA_FISH_FEED'] }
+        ],
+        skipDuplicates: true // Ensures you can run this file multiple times safely
     });
 
-    console.log(`✅ Successfully seeded ${result.count} feed items into the database.`);
+    console.log("Database seeded successfully with real inventory!");
 }
 
 main()
     .catch((e) => {
-        console.error('❌ Error during seeding:', e);
+        console.error(e);
         process.exit(1);
     })
     .finally(async () => {
-        // This strictly closes the database connection when the script finishes
         await prisma.$disconnect();
     });

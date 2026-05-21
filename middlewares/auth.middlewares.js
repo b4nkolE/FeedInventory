@@ -71,7 +71,7 @@ export const authorizeRoles = (...allowedRoles) => {
                 error: `Access denied. Requires one of the following roles: ${allowedRoles.join(', ')}` 
             });
         }
-
+        
         // 3. If they pass, send them to the controller!
         next();
     };

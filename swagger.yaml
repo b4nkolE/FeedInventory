@@ -377,3 +377,111 @@ paths:
       responses:
         '200':
           description: Returns transactions executed by managers
+
+  # ================= CATEGORIES =================
+  /api/v1/category/createCategories:
+    post:
+      summary: Create a new feed category
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: "NEW_STARTER_MASH"
+      responses:
+        '201':
+          description: Category created successfully
+        '400':
+          description: Category name already exists
+
+  /api/v1/category/updateCategories:/{id}:
+    put:
+      summary: Update a category's name
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: "CORRECTED_NAME"
+      responses:
+        '200':
+          description: Category updated successfully
+        '400':
+          description: Name already taken
+        '404':
+          description: Category not found
+
+  /api/v1/category/getCategories:
+    get:
+      summary: Get all feed categories (optimized for frontend dropdowns)
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successfully fetched all categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: "a1b2c3d4-5678-90ef-ghij-klmnopqrstuv"
+                    name:
+                      type: string
+                      example: "FISH_FEED"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to fetch categories"
+
+  /api/v1/category/deleteCategories:/{id}:
+    delete:
+      summary: Delete a category (Restricted if in use)
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Category deleted successfully
+        '403':
+          description: Action blocked - Category is currently in use by feed items
+        '404':
+          description: Category not found
