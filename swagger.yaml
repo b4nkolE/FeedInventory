@@ -337,13 +337,62 @@ paths:
   # ================= INVENTORY & TRANSACTIONS =================
   /api/v1/inventory/feeds:
     get:
-      summary: Get all feed items in the catalog
+      summary: Get all feed items in the catalog (Paginated)
       tags: [Inventory Catalog]
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+          description: Number of items per page
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Filter feeds by name (case-insensitive partial match)
+        - in: query
+          name: categoryId
+          schema:
+            type: string
+          description: Filter feeds by category UUID
       responses:
         '200':
-          description: Returns sorted inventory list
+          description: Returns paginated feed catalog with metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                    properties:
+                      totalRecords:
+                        type: integer
+                      currentPage:
+                        type: integer
+                      totalPages:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      hasNextPage:
+                        type: boolean
+                      hasPrevPage:
+                        type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedItem'
+        '500':
+          description: Internal server error
     post:
       summary: Create a new feed product
       tags: [Inventory Catalog]

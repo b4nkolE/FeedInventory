@@ -72,21 +72,70 @@ export const recordTransaction = async (req, res) => {
 };
 
 export const getAllFeeds = async (req, res) => {
-    const feeds = await prisma.feedItem.findMany({
-        // CHANGE: Ask Prisma to fetch the related category data!
-        include: {
-            category: {
-                select: {
-                    name: true // Just grab the name of the category
-                }
-            }
-        },
-        orderBy: {
-            name: 'asc'
-        }
-    });
+    const {
+        page = 1,
+        limit = 20,
+        search,
+        categoryId
+    } = req.query;
 
-    res.status(200).json(feeds);
+    const pageNumber = parseInt(page, 10) || 1;
+    const pageSize = parseInt(limit, 10) || 20;
+    const skip = (pageNumber - 1) * pageSize;
+
+    // Build dynamic filter
+    let queryFilter = {};
+
+    if (search) {
+        queryFilter.name = {
+            contains: search,
+            mode: 'insensitive'
+        };
+    }
+
+    if (categoryId) {
+        queryFilter.categoryId = categoryId;
+    }
+
+    try {
+        // Execute both count and fetch simultaneously
+        const [totalCount, feeds] = await prisma.$transaction([
+            prisma.feedItem.count({ where: queryFilter }),
+            prisma.feedItem.findMany({
+                where: queryFilter,
+                include: {
+                    category: {
+                        select: {
+                            name: true
+                        }
+                    }
+                },
+                orderBy: {
+                    name: 'asc'
+                },
+                skip: skip,
+                take: pageSize
+            })
+        ]);
+
+        const totalPages = Math.ceil(totalCount / pageSize);
+
+        res.status(200).json({
+            metadata: {
+                totalRecords: totalCount,
+                currentPage: pageNumber,
+                totalPages: totalPages,
+                pageSize: pageSize,
+                hasNextPage: pageNumber < totalPages,
+                hasPrevPage: pageNumber > 1
+            },
+            data: feeds
+        });
+
+    } catch (error) {
+        console.error("Error fetching feeds:", error);
+        res.status(500).json({ error: "Failed to fetch feed catalog." });
+    }
 };
 
 export const getFeedById = async (req, res) => {
