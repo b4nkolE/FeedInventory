@@ -218,6 +218,63 @@ paths:
         '500':
           description: Internal server error
 
+  /api/v1/users/refresh-token:
+    post:
+      summary: Refresh an expired access token
+      description: >
+        Accepts a valid refresh token and returns a new short-lived access token.
+        The refresh token itself is not rotated. If the user's account has been
+        deactivated or deleted since the refresh token was issued, the request
+        will be rejected with a 403.
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  description: The long-lived refresh token received during sign-up or sign-in
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: New access token issued successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Token refreshed successfully."
+                  token:
+                    type: string
+                    description: A new short-lived JWT access token
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '401':
+          description: Refresh token was not provided
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Refresh token is required."
+        '403':
+          description: Refresh token is invalid, expired, or the account is deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid or expired refresh token. Please sign in again."
+
   /api/v1/users:
     get:
       summary: Get all users (Managers & Admins only)
