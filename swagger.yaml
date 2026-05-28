@@ -49,8 +49,9 @@ components:
           type: string
         name:
           type: string
-        category:
+        categoryId:
           type: string
+          description: UUID of the associated Category
         currentStock:
           type: integer
 
@@ -227,12 +228,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, category]
+              required: [name, categoryId]
               properties:
                 name:
                   type: string
-                category:
+                categoryId:
                   type: string
+                  description: UUID of an existing Category
       responses:
         '201':
           description: Feed product created
@@ -274,8 +276,9 @@ paths:
               properties:
                 name:
                   type: string
-                category:
+                categoryId:
                   type: string
+                  description: UUID of an existing Category
       responses:
         '200':
           description: Feed item updated
@@ -313,16 +316,32 @@ paths:
 
   /api/v1/inventory/transactions:
     get:
-      summary: Get the master transaction ledger
+      summary: Get the master transaction ledger (Paginated)
       tags: [Traceability Ledger]
       security:
         - bearerAuth: []
       parameters:
         - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+          description: Number of items per page
+        - in: query
           name: type
           schema:
             type: string
             enum: [IN, OUT]
+        - in: query
+          name: feedItemId
+          schema:
+            type: string
         - in: query
           name: startDate
           schema:
@@ -333,13 +352,33 @@ paths:
           schema:
             type: string
             format: date
-        - in: query
-          name: feedItemId
-          schema:
-            type: string
       responses:
         '200':
-          description: Returns the full filtered ledger
+          description: Returns paginated ledger with metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                    properties:
+                      totalRecords:
+                        type: integer
+                      currentPage:
+                        type: integer
+                      totalPages:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      hasNextPage:
+                        type: boolean
+                      hasPrevPage:
+                        type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
 
   # ================= ANALYTICS =================
   /api/v1/analytics/summary:
@@ -465,6 +504,47 @@ paths:
                   error:
                     type: string
                     example: "Failed to fetch categories"
+
+  /api/v1/inventory/getCategories/{id}:
+    get:
+      summary: Get a specific category by ID (includes its feed items)
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the category
+      responses:
+        '200':
+          description: Successfully fetched category details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  feedItems:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        currentStock:
+                          type: integer
+        '400':
+          description: Invalid category ID format
+        '404':
+          description: Category not found
 
   /api/v1/category/deleteCategories:/{id}:
     delete:

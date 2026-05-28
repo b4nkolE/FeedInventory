@@ -29,14 +29,14 @@ export const recordTransaction = async (req, res) => {
 
     // 4. Calculate what the new stock level should be
     let newStock = feedItem.currentStock;
-    
+
     if (type === 'IN') {
         newStock += quantity;
     } else if (type === 'OUT') {
         // Prevent staff from selling more than you actually have!
         if (feedItem.currentStock < quantity) {
-            return res.status(400).json({ 
-                error: `Insufficient stock. You only have ${feedItem.currentStock} units of this feed available.` 
+            return res.status(400).json({
+                error: `Insufficient stock. You only have ${feedItem.currentStock} units of this feed available.`
             });
         }
         newStock -= quantity;
@@ -109,10 +109,10 @@ export const getFeedById = async (req, res) => {
 
 
 export const createFeedItem = async (req, res) => {
-    const { name, categoryId } = req.body;
+    const { categoryId, name } = req.body;
 
     // 1. Basic validation
-    if (!name || !category) {
+    if (!name || !categoryId) {
         return res.status(400).json({ error: "Feed name and category are required." });
     }
 
@@ -122,12 +122,20 @@ export const createFeedItem = async (req, res) => {
     });
 
     if (existingFeed) {
-        return res.status(400).json({ 
-            error: `A feed item named '${name}' already exists in the catalog.` 
+        return res.status(400).json({
+            error: `A feed item named '${name}' already exists in the catalog.`
         });
     }
 
-    // 3. Create the new feed item
+    // 3. Verify the category actually exists
+    const categoryExists = await prisma.category.findUnique({
+        where: { id: categoryId }
+    });
+    if (!categoryExists) {
+        return res.status(400).json({ error: "The specified category does not exist." });
+    }
+
+    // 4. Create the new feed item
     // Notice we do not pass currentStock here. Your database schema 
     // already has @default(0), so it will automatically start empty!
     const newFeed = await prisma.feedItem.create({
@@ -147,10 +155,10 @@ export const createFeedItem = async (req, res) => {
 
 export const updateFeedItem = async (req, res) => {
     const { id } = req.params;
-    const { name, categoryId } = req.body;
+    const { categoryId, name } = req.body;
 
     // 1. Ensure they actually sent something to update
-    if (!name && !category) {
+    if (!name && !categoryId) {
         return res.status(400).json({ error: "Please provide a name or category to update." });
     }
 
@@ -170,20 +178,30 @@ export const updateFeedItem = async (req, res) => {
         });
 
         if (nameCheck) {
-            return res.status(400).json({ 
-                error: `A feed item named '${name}' already exists.` 
+            return res.status(400).json({
+                error: `A feed item named '${name}' already exists.`
             });
         }
     }
 
-    // 4. Perform the update
+    // 4. If they are changing the category, ensure the new category exists
+    if (categoryId) {
+        const categoryExists = await prisma.category.findUnique({
+            where: { id: categoryId }
+        });
+        if (!categoryExists) {
+            return res.status(400).json({ error: "The specified category does not exist." });
+        }
+    }
+
+    // 5. Perform the update
     // We use the spread operator or pass the specific fields so we only 
     // update what was actually provided in the request body.
     const updatedFeed = await prisma.feedItem.update({
         where: { id: id },
         data: {
             ...(name && { name }),
-            ...(category && { categoryId })
+            ...(categoryId && { categoryId })
         }
     });
 
@@ -194,60 +212,85 @@ export const updateFeedItem = async (req, res) => {
     });
 };
 
-// controllers/inventoryController.js
-
-// controllers/inventory.controller.js
 
 export const getAllTransactions = async (req, res) => {
-    // 1. Grab the optional query parameters from the URL
-    // e.g., ?type=IN&startDate=2026-04-01&feedItemId=some-uuid
-    const { type, startDate, endDate, feedItemId } = req.query;
+    // 1. Grab filters AND pagination params from the URL
+    // We set default values: page 1, 20 items per page
+    const {
+        type,
+        startDate,
+        endDate,
+        feedItemId,
+        page = 1,     // NEW: Pagination param
+        limit = 20    // NEW: Pagination param
+    } = req.query;
 
-    // 2. Build a dynamic filter object
+    // Convert string inputs to integers for Prisma calculations
+    const pageNumber = parseInt(page, 10) || 1;
+    const pageSize = parseInt(limit, 10) || 20;
+
+    // Calculate how many records to "skip" in the database
+    const skip = (pageNumber - 1) * pageSize;
+
+    // 2. Build the dynamic filter object (Your existing logic)
     let queryFilter = {};
 
     if (type) {
-        queryFilter.type = type.toUpperCase(); // Ensure it matches 'IN' or 'OUT'
+        queryFilter.type = type.toUpperCase();
     }
-    
+
     if (feedItemId) {
         queryFilter.feedItemId = feedItemId;
     }
 
-    // 3. Handle date ranges if the frontend provided them
     if (startDate || endDate) {
         queryFilter.date = {};
-        if (startDate) queryFilter.date.gte = new Date(startDate); // Greater than or equal to
-        if (endDate) queryFilter.date.lte = new Date(endDate);     // Less than or equal to
+        if (startDate) queryFilter.date.gte = new Date(startDate);
+        if (endDate) queryFilter.date.lte = new Date(endDate);
     }
 
-    // 4. Fetch the ledger from the database using the dynamic filter
     try {
-        const transactions = await prisma.transaction.findMany({
-            where: queryFilter,
-            orderBy: {
-                date: 'desc' // Always show the newest transactions at the top!
-            },
-            include: {
-                // This is the updated relation for the new Enterprise architecture
-                feedItem: {
-                    select: { 
-                        name: true, 
-                        // Go one level deeper to grab the category name
-                        category: {
-                            select: { name: true }
+        // 3. Execute both the Count and the Fetch simultaneously!
+        const [totalCount, transactions] = await prisma.$transaction([
+            // Query A: Count the total number of rows matching the filter
+            prisma.transaction.count({ where: queryFilter }),
+
+            // Query B: Fetch the specific page of data
+            prisma.transaction.findMany({
+                where: queryFilter,
+                orderBy: { date: 'desc' },
+                skip: skip,       // Skip previous pages
+                take: pageSize,   // Take only this page's limit
+                include: {
+                    feedItem: {
+                        select: {
+                            name: true,
+                            category: { select: { name: true } }
                         }
+                    },
+                    user: {
+                        select: { firstName: true, lastName: true }
                     }
-                },
-                user: {
-                    select: { firstName: true, lastName: true }
                 }
-            }
+            })
+        ]);
+
+        // 4. Calculate total pages
+        const totalPages = Math.ceil(totalCount / pageSize);
+
+        // 5. Send back a structured "Paginated Payload"
+        res.status(200).json({
+            metadata: {
+                totalRecords: totalCount,
+                currentPage: pageNumber,
+                totalPages: totalPages,
+                pageSize: pageSize,
+                hasNextPage: pageNumber < totalPages,
+                hasPrevPage: pageNumber > 1
+            },
+            data: transactions // The actual array of ledger items
         });
 
-        // 5. Return the heavily detailed, filtered list
-        res.status(200).json(transactions);
-        
     } catch (error) {
         console.error("Error fetching transactions:", error);
         res.status(500).json({ error: "Failed to fetch transaction ledger." });
@@ -260,7 +303,7 @@ export const getAllTransactions = async (req, res) => {
 // export const getTransactionsByFeedId = async (req, res) => {
 //     // 1. Grab the Feed ID from the URL path
 //     const { feedItemId } = req.params;
-    
+
 //     // 2. Grab optional filters from the query string (?type=IN)
 //     const { type, startDate, endDate } = req.query;
 
@@ -332,7 +375,7 @@ export const getAllCategories = async (req, res) => {
         // Send the raw array of objects to the frontend
         // Example output: [{ id: "uuid-1", name: "FISH_FEED" }, { id: "uuid-2", name: "PULLET_RATION" }]
         res.status(200).json(categories);
-        
+
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch categories" });
     }

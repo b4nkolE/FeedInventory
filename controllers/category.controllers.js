@@ -78,6 +78,43 @@ export const updateCategory = async (req, res) => {
     }
 };
 
+export const getCategoryById = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const category = await prisma.category.findUnique({
+            where: { id: id },
+            include: {
+                // Return all the feeds inside this category!
+                feedItems: {
+                    select: {
+                        id: true,
+                        name: true,
+                        currentStock: true
+                    },
+                    orderBy: {
+                        name: 'asc'
+                    }
+                }
+            }
+        });
+
+        if (!category) {
+            return res.status(404).json({ error: "Category not found." });
+        }
+
+        res.status(200).json(category);
+        
+    } catch (error) {
+        // Prisma throws a specific error (P2023) if the ID string isn't a valid UUID
+        if (error.code === 'P2023') {
+            return res.status(400).json({ error: "Invalid category ID format." });
+        }
+        res.status(500).json({ error: "Failed to fetch category details." });
+    }
+};
+
+
 export const deleteCategory = async (req, res) => {
     const { id } = req.params;
 

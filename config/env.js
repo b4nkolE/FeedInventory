@@ -8,5 +8,7 @@ export const {
     DIRECT_URL,
     PORT,
     JWT_SECRET,
-    JWT_EXPIRES_IN
+    JWT_EXPIRES_IN,
+    REFRESH_TOKEN_SECRET,
+    REFRESH_TOKEN_EXPIRES_IN
 } = process.env
