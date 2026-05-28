@@ -1,4 +1,4 @@
-import { signUp, signIn, getMe, refreshToken } from "../controllers/auth.controllers.js";
+import { signUp, signIn, getMe, refreshToken, forgotPassword, resetPassword } from "../controllers/auth.controllers.js";
 import {Router} from "express";
 import {verifyToken} from "../middlewares/auth.middlewares.js"
 
@@ -9,6 +9,8 @@ authRouter.post("/signup", signUp);
 authRouter.post("/signin", signIn);
 authRouter.get('/me', verifyToken, getMe);
 authRouter.post('/refresh-token', refreshToken);
+authRouter.post('/forgot-password', forgotPassword);
+authRouter.post('/reset-password', resetPassword);
 
 export default authRouter;
 

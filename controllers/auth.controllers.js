@@ -2,6 +2,7 @@ import prisma from "../database/postgres.js";
 import bcrypt from "bcrypt";
 import { JWT_SECRET, JWT_EXPIRES_IN, REFRESH_TOKEN_EXPIRES_IN, REFRESH_TOKEN_SECRET } from "../config/env.js";
 import jwt from "jsonwebtoken";
+import { sendResetCodeEmail } from "../config/mailer.js";
 
 
 const generateAuthTokens = (user) => {
@@ -197,4 +198,126 @@ export const refreshToken = async (req, res) => {
 };
 
 
+export const forgotPassword = async (req, res) => {
+    const { email } = req.body;
 
+    if (!email) {
+        return res.status(400).json({ error: "Email is required." });
+    }
+
+    try {
+        // 1. Look up the user — but don't reveal if the email exists or not
+        const user = await prisma.user.findUnique({
+            where: { email }
+        });
+
+        if (!user) {
+            // Security: Return the same success message to prevent email enumeration
+            return res.status(200).json({
+                message: "If an account with that email exists, a reset code has been sent."
+            });
+        }
+
+        // 2. Delete any existing unused reset tokens for this user (prevent stacking)
+        await prisma.passwordReset.deleteMany({
+            where: {
+                userId: user.id,
+                used: false
+            }
+        });
+
+        // 3. Generate a random 6-digit code
+        const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // 4. Hash the code before storing (same approach as passwords)
+        const tokenHash = await bcrypt.hash(resetCode, 10);
+
+        // 5. Store in the database with a 15-minute expiry
+        await prisma.passwordReset.create({
+            data: {
+                userId: user.id,
+                tokenHash,
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
+            }
+        });
+
+        // 6. Send the code via email
+        await sendResetCodeEmail(email, resetCode, user.firstName);
+
+        res.status(200).json({
+            message: "If an account with that email exists, a reset code has been sent."
+        });
+
+    } catch (error) {
+        console.error("Forgot password error:", error);
+        res.status(500).json({ error: "Failed to process password reset request." });
+    }
+};
+
+
+export const resetPassword = async (req, res) => {
+    const { email, code, newPassword } = req.body;
+
+    // 1. Validate inputs
+    if (!email || !code || !newPassword) {
+        return res.status(400).json({ error: "Email, reset code, and new password are required." });
+    }
+
+    if (newPassword.length < 6) {
+        return res.status(400).json({ error: "New password must be at least 6 characters." });
+    }
+
+    try {
+        // 2. Look up the user
+        const user = await prisma.user.findUnique({
+            where: { email }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: "Invalid email or reset code." });
+        }
+
+        // 3. Find the most recent, unused, non-expired reset token for this user
+        const resetRecord = await prisma.passwordReset.findFirst({
+            where: {
+                userId: user.id,
+                used: false,
+                expiresAt: { gt: new Date() } // Must not be expired
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        if (!resetRecord) {
+            return res.status(400).json({ error: "Reset code is invalid or has expired. Please request a new one." });
+        }
+
+        // 4. Compare the provided code against the stored hash
+        const isCodeValid = await bcrypt.compare(code, resetRecord.tokenHash);
+
+        if (!isCodeValid) {
+            return res.status(400).json({ error: "Invalid email or reset code." });
+        }
+
+        // 5. Hash the new password and update the user
+        const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+        await prisma.$transaction([
+            // Update the user's password
+            prisma.user.update({
+                where: { id: user.id },
+                data: { passwordHash: newPasswordHash }
+            }),
+            // Mark the token as used so it can't be reused
+            prisma.passwordReset.update({
+                where: { id: resetRecord.id },
+                data: { used: true }
+            })
+        ]);
+
+        res.status(200).json({ message: "Password reset successfully. You can now sign in with your new password." });
+
+    } catch (error) {
+        console.error("Reset password error:", error);
+        res.status(500).json({ error: "Failed to reset password." });
+    }
+};
