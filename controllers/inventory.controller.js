@@ -3,7 +3,7 @@ import prisma from "../database/postgres.js";
 
 export const recordTransaction = async (req, res) => {
     // 1. Get the data from the request body
-    const { feedItemId, type, quantity, reference, notes } = req.body;
+    const { feedItemId, type, quantity, reference, notes, buyerName } = req.body;
 
     // 2. Validate the inputs
     if (!feedItemId || !type || quantity === undefined) {
@@ -33,6 +33,9 @@ export const recordTransaction = async (req, res) => {
     if (type === 'IN') {
         newStock += quantity;
     } else if (type === 'OUT') {
+        if (!feedItem.pricePerUnit) {
+            return res.status(400).json({ error: "Cannot sell feed without a set price per unit. Please update the feed item first." });
+        }
         // Prevent staff from selling more than you actually have!
         if (feedItem.currentStock < quantity) {
             return res.status(400).json({
@@ -42,19 +45,46 @@ export const recordTransaction = async (req, res) => {
         newStock -= quantity;
     }
 
-    // 5. Execute the Prisma Transaction
+    // 5. Build transaction data
+    let transactionData = {
+        feedItemId,
+        userId: req.user.id, // We get this from your verifyToken middleware!
+        type,
+        quantity,
+        reference,
+        notes
+    };
+
+    if (type === 'OUT') {
+        // Generate receipt number: GGS-YYYY-XXXX
+        const year = new Date().getFullYear();
+        const salesCount = await prisma.sale.count({
+            where: { receiptNumber: { startsWith: `GGS-${year}-` } }
+        });
+        const sequence = String(salesCount + 1).padStart(4, '0');
+        const receiptNumber = `GGS-${year}-${sequence}`;
+
+        transactionData.sale = {
+            create: {
+                receiptNumber,
+                quantity,
+                unitPrice: feedItem.pricePerUnit,
+                totalPrice: Number(feedItem.pricePerUnit) * quantity,
+                buyerName,
+                notes,
+                feedItemId,
+                userId: req.user.id
+            }
+        };
+    }
+
+    // 6. Execute the Prisma Transaction
     // Both of these commands execute together atomically
     const [newTransaction, updatedFeedItem] = await prisma.$transaction([
-        // Action A: Record the transaction history
+        // Action A: Record the transaction history (and Sale if OUT)
         prisma.transaction.create({
-            data: {
-                feedItemId,
-                userId: req.user.id, // We get this from your verifyToken middleware!
-                type,
-                quantity,
-                reference,
-                notes
-            }
+            data: transactionData,
+            include: { sale: true }
         }),
         // Action B: Update the actual stock number on the feed item
         prisma.feedItem.update({
@@ -63,7 +93,7 @@ export const recordTransaction = async (req, res) => {
         })
     ]);
 
-    // 6. Send the success response
+    // 7. Send the success response
     res.status(201).json({
         message: `Successfully recorded ${quantity} units ${type}.`,
         transaction: newTransaction,
@@ -158,11 +188,15 @@ export const getFeedById = async (req, res) => {
 
 
 export const createFeedItem = async (req, res) => {
-    const { categoryId, name } = req.body;
+    const { categoryId, name, pricePerUnit } = req.body;
 
     // 1. Basic validation
-    if (!name || !categoryId) {
-        return res.status(400).json({ error: "Feed name and category are required." });
+    if (!name || !categoryId || pricePerUnit === undefined) {
+        return res.status(400).json({ error: "Feed name, category, and price per unit are required." });
+    }
+
+    if (pricePerUnit <= 0) {
+        return res.status(400).json({ error: "Price per unit must be greater than zero." });
     }
 
     // 2. Check for duplicates to prevent database errors
@@ -190,7 +224,8 @@ export const createFeedItem = async (req, res) => {
     const newFeed = await prisma.feedItem.create({
         data: {
             name,
-            categoryId
+            categoryId,
+            pricePerUnit
         }
     });
 
@@ -204,11 +239,11 @@ export const createFeedItem = async (req, res) => {
 
 export const updateFeedItem = async (req, res) => {
     const { id } = req.params;
-    const { categoryId, name } = req.body;
+    const { categoryId, name, pricePerUnit } = req.body;
 
     // 1. Ensure they actually sent something to update
-    if (!name && !categoryId) {
-        return res.status(400).json({ error: "Please provide a name or category to update." });
+    if (!name && !categoryId && pricePerUnit === undefined) {
+        return res.status(400).json({ error: "Please provide a name, category, or price per unit to update." });
     }
 
     // 2. Check if the feed item actually exists first
@@ -250,7 +285,8 @@ export const updateFeedItem = async (req, res) => {
         where: { id: id },
         data: {
             ...(name && { name }),
-            ...(categoryId && { categoryId })
+            ...(categoryId && { categoryId }),
+            ...(pricePerUnit !== undefined && { pricePerUnit })
         }
     });
 

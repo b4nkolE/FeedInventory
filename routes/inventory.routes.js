@@ -1,6 +1,7 @@
 // routes/inventoryRoutes.js
 import express from 'express';
 import { recordTransaction, getAllFeeds, getFeedById, createFeedItem, updateFeedItem, getAllTransactions} from '../controllers/inventory.controller.js';
+import { getReceipt, getAllReceipts } from '../controllers/receipt.controller.js';
 import { verifyToken, authorizeRoles } from '../middlewares/auth.middlewares.js';
 
 const inventoryRouter = express.Router();
@@ -13,4 +14,9 @@ inventoryRouter.get('/feeds/:id', verifyToken, getFeedById);
 inventoryRouter.post('/feeds', verifyToken, createFeedItem);
 inventoryRouter.put('/feeds/:id', verifyToken, updateFeedItem);
 //inventoryRouter.get('feeds/:feedItemId/transactions', verifyToken, authorizeRoles('MANAGER', 'ADMIN'), getTransactionsByFeedId);
+
+// Receipts
+inventoryRouter.get('/receipts', verifyToken, authorizeRoles('MANAGER', 'ADMIN'), getAllReceipts);
+inventoryRouter.get('/receipts/:id', verifyToken, getReceipt);
+
 export default inventoryRouter;

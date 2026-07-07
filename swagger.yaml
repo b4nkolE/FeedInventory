@@ -54,6 +54,8 @@ components:
           description: UUID of the associated Category
         currentStock:
           type: integer
+        pricePerUnit:
+          type: number
 
     Transaction:
       type: object
@@ -76,6 +78,34 @@ components:
         date:
           type: string
           format: date-time
+
+    Sale:
+      type: object
+      properties:
+        id:
+          type: string
+        receiptNumber:
+          type: string
+          example: "GGS-2026-0001"
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+        totalPrice:
+          type: number
+        buyerName:
+          type: string
+        notes:
+          type: string
+        date:
+          type: string
+          format: date-time
+        feedItemId:
+          type: string
+        transactionId:
+          type: string
+        userId:
+          type: string
 
 # ---------------------------------------------------------
 # PATHS (ROUTES)
@@ -404,13 +434,15 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, categoryId]
+              required: [name, categoryId, pricePerUnit]
               properties:
                 name:
                   type: string
                 categoryId:
                   type: string
                   description: UUID of an existing Category
+                pricePerUnit:
+                  type: number
       responses:
         '201':
           description: Feed product created
@@ -455,6 +487,8 @@ paths:
                 categoryId:
                   type: string
                   description: UUID of an existing Category
+                pricePerUnit:
+                  type: number
       responses:
         '200':
           description: Feed item updated
@@ -481,6 +515,8 @@ paths:
                 quantity:
                   type: integer
                 reference:
+                  type: string
+                buyerName:
                   type: string
                 notes:
                   type: string
@@ -555,6 +591,70 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Transaction'
+
+  /api/v1/inventory/receipts:
+    get:
+      summary: Get all sale receipts (Paginated)
+      tags: [Traceability Ledger]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: feedItemId
+          schema:
+            type: string
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Returns paginated receipts with metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sale'
+
+  /api/v1/inventory/receipts/{id}:
+    get:
+      summary: Get a specific receipt by ID
+      tags: [Traceability Ledger]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Returns structured receipt details
+        '404':
+          description: Receipt not found
 
   # ================= ANALYTICS =================
   /api/v1/analytics/summary:
