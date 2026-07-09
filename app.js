@@ -22,7 +22,8 @@ app.use(cors({
     origin: ["http://localhost:8000", "https://gbenro-global-synergy.vercel.app", 'http://localhost:3000', "http://localhost:3001","http://localhost:3002","https://gbenroglobalsynergyltd.onrender.com"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true,
-    allowedHeaders: ["Content-type", "Authorization"]
+    allowedHeaders: ["Content-type", "Authorization"],
+    exposedHeaders: ["Content-Disposition"]
 }));
 
 app.use("/api/v1/users", authRouter);

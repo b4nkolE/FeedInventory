@@ -656,6 +656,36 @@ paths:
         '404':
           description: Receipt not found
 
+  /api/v1/inventory/receipts/{id}/download:
+    get:
+      summary: Download a receipt as a PDF
+      description: >
+        Generates and streams a professionally formatted PDF receipt for the
+        given sale ID. The response is a downloadable PDF file with
+        Content-Disposition set to attachment.
+      tags: [Traceability Ledger]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the sale/receipt to download
+      responses:
+        '200':
+          description: PDF file streamed successfully
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Receipt not found
+        '500':
+          description: Failed to generate receipt PDF
+
   # ================= ANALYTICS =================
   /api/v1/analytics/summary:
     get:
@@ -717,7 +747,7 @@ paths:
         '400':
           description: Category name already exists
 
-  /api/v1/category/updateCategories:/{id}:
+  /api/v1/category/updateCategories/{id}:
     put:
       summary: Update a category's name
       tags: [Categories]
@@ -781,7 +811,7 @@ paths:
                     type: string
                     example: "Failed to fetch categories"
 
-  /api/v1/inventory/getCategories/{id}:
+  /api/v1/category/getCategories/{id}:
     get:
       summary: Get a specific category by ID (includes its feed items)
       tags: [Categories]
@@ -803,9 +833,9 @@ paths:
                 type: object
                 properties:
                   id:
-                    type: string
+                     type: string
                   name:
-                    type: string
+                     type: string
                   feedItems:
                     type: array
                     items:
@@ -822,7 +852,7 @@ paths:
         '404':
           description: Category not found
 
-  /api/v1/category/deleteCategories:/{id}:
+  /api/v1/category/deleteCategories/{id}:
     delete:
       summary: Delete a category (Restricted if in use)
       tags: [Categories]
