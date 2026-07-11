@@ -19,5 +19,6 @@ inventoryRouter.put('/feeds/:id', verifyToken, updateFeedItem);
 // Receipts
 inventoryRouter.get('/receipts', verifyToken, authorizeRoles('MANAGER', 'ADMIN'), getAllReceipts);
 inventoryRouter.get('/receipts/:id', verifyToken, getReceipt);
+inventoryRouter.get('/receipts/:id/download', verifyToken, downloadReceipt);
 
 export default inventoryRouter;
