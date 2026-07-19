@@ -663,6 +663,18 @@ paths:
         Generates and streams a professionally formatted PDF receipt for the
         given sale ID. The response is a downloadable PDF file with
         Content-Disposition set to attachment.
+
+
+        **Two layout formats are available:**
+
+        - **standard** (default) — A4 corporate-style receipt with a branded
+          header band, colour-coded table, and full-width layout.
+
+        - **thermal** — Supermarket-style 80mm thermal receipt optimised for
+          POS printers. Uses a compact layout (226.77 pt width) with dashed
+          dividers, centred headers, and dynamic page height calculated from
+          item name wrapping, buyer details, and notes length. Prices are
+          rendered with the Naira (₦) symbol.
       tags: [Traceability Ledger]
       security:
         - bearerAuth: []
@@ -673,9 +685,29 @@ paths:
           schema:
             type: string
           description: The UUID of the sale/receipt to download
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [standard, thermal]
+            default: standard
+          description: >
+            The PDF layout format.
+            Use `standard` for an A4 corporate receipt (default).
+            Use `thermal` for an 80mm POS / supermarket-style thermal receipt.
+          example: thermal
       responses:
         '200':
           description: PDF file streamed successfully
+          headers:
+            Content-Disposition:
+              description: >
+                Attachment header with the generated filename, e.g.
+                `attachment; filename="receipt-GGS-2026-0001.pdf"`
+              schema:
+                type: string
+                example: 'attachment; filename="receipt-GGS-2026-0001.pdf"'
           content:
             application/pdf:
               schema:
@@ -683,8 +715,24 @@ paths:
                 format: binary
         '404':
           description: Receipt not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Receipt not found."
         '500':
           description: Failed to generate receipt PDF
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to generate receipt PDF."
 
   # ================= ANALYTICS =================
   /api/v1/analytics/summary:
