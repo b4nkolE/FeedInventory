@@ -79,6 +79,27 @@ components:
           type: string
           format: date-time
 
+    SaleItem:
+      type: object
+      properties:
+        id:
+          type: string
+        saleId:
+          type: string
+        feedItemId:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+        totalPrice:
+          type: number
+        feedItem:
+          type: object
+          properties:
+            name:
+              type: string
+
     Sale:
       type: object
       properties:
@@ -87,10 +108,6 @@ components:
         receiptNumber:
           type: string
           example: "GGS-2026-0001"
-        quantity:
-          type: integer
-        unitPrice:
-          type: number
         totalPrice:
           type: number
         buyerName:
@@ -100,12 +117,12 @@ components:
         date:
           type: string
           format: date-time
-        feedItemId:
-          type: string
-        transactionId:
-          type: string
         userId:
           type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleItem'
 
 # ---------------------------------------------------------
 # PATHS (ROUTES)
@@ -495,7 +512,12 @@ paths:
 
   /api/v1/inventory/transaction:
     post:
-      summary: Record an IN or OUT transaction
+      summary: Record an IN or OUT transaction (Single or Multi-Item Sales)
+      description: >
+        Records inventory movements.
+        - **IN**: Requires `feedItemId`, `quantity`, and `type: "IN"`. Increments stock level.
+        - **OUT**: Supports multi-item sales (`items: [{ feedItemId, quantity }]`) or single item (`feedItemId`, `quantity`).
+          Reduces stock atomically across all items in a transaction block and generates a sales receipt.
       tags: [Traceability Ledger]
       security:
         - bearerAuth: []
@@ -505,26 +527,49 @@ paths:
           application/json:
             schema:
               type: object
-              required: [feedItemId, type, quantity]
+              required: [type]
               properties:
-                feedItemId:
-                  type: string
                 type:
                   type: string
                   enum: [IN, OUT]
+                  example: "OUT"
+                feedItemId:
+                  type: string
+                  description: Required for IN transactions, or single-item OUT transaction fallback.
+                  example: "a1b2c3d4-5678-90ef-ghij-klmnopqrstuv"
                 quantity:
                   type: integer
+                  description: Required for IN transactions, or single-item OUT transaction fallback.
+                  example: 10
+                items:
+                  type: array
+                  description: Array of items for multi-item OUT sales transactions.
+                  items:
+                    type: object
+                    required: [feedItemId, quantity]
+                    properties:
+                      feedItemId:
+                        type: string
+                        example: "a1b2c3d4-5678-90ef-ghij-klmnopqrstuv"
+                      quantity:
+                        type: integer
+                        example: 5
                 reference:
                   type: string
+                  example: "POS-REF-9921"
                 buyerName:
                   type: string
+                  example: "John Doe Farms"
                 notes:
                   type: string
+                  example: "Customer requested receipt via WhatsApp"
       responses:
         '201':
-          description: Transaction recorded and stock updated
+          description: Transaction recorded and stock updated atomically
         '400':
-          description: Insufficient stock or invalid data
+          description: Insufficient stock, unpriced feed item, or invalid parameters
+        '404':
+          description: Feed item not found
 
   /api/v1/inventory/transactions:
     get:

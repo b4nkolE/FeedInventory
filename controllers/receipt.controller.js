@@ -7,15 +7,19 @@ export const getReceipt = async (req, res) => {
         const sale = await prisma.sale.findUnique({
             where: { id },
             include: {
-                feedItem: {
-                    select: {
-                        name: true,
-                        category: {
-                            select: { name: true }
+                items: {
+                    include: {
+                        feedItem: {
+                            select: {
+                                name: true,
+                                category: {
+                                    select: { name: true }
+                                }
+                            }
                         }
                     }
                 },
-                transaction: {
+                transactions: {
                     select: {
                         reference: true
                     }
@@ -33,20 +37,26 @@ export const getReceipt = async (req, res) => {
             return res.status(404).json({ error: "Receipt not found." });
         }
 
+        const reference = sale.transactions.find(t => t.reference)?.reference || null;
+        const items = sale.items.map(item => ({
+            id: item.id,
+            feedItemId: item.feedItemId,
+            name: item.feedItem.name,
+            category: item.feedItem.category?.name || "N/A",
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice
+        }));
+
         const receipt = {
             id: sale.id,
             receiptNumber: sale.receiptNumber,
             date: sale.date,
-            item: {
-                name: sale.feedItem.name,
-                category: sale.feedItem.category.name
-            },
-            quantity: sale.quantity,
-            unitPrice: sale.unitPrice,
+            items,
             totalPrice: sale.totalPrice,
             buyerName: sale.buyerName,
             soldBy: `${sale.user.firstName} ${sale.user.lastName}`,
-            reference: sale.transaction.reference,
+            reference,
             notes: sale.notes
         };
 
@@ -74,7 +84,11 @@ export const getAllReceipts = async (req, res) => {
         let queryFilter = {};
 
         if (feedItemId) {
-            queryFilter.feedItemId = feedItemId;
+            queryFilter.items = {
+                some: {
+                    feedItemId: feedItemId
+                }
+            };
         }
 
         if (startDate || endDate) {
@@ -91,8 +105,12 @@ export const getAllReceipts = async (req, res) => {
                 skip: skip,
                 take: pageSize,
                 include: {
-                    feedItem: {
-                        select: { name: true }
+                    items: {
+                        include: {
+                            feedItem: {
+                                select: { name: true }
+                            }
+                        }
                     },
                     user: {
                         select: { firstName: true, lastName: true }

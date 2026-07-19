@@ -2,103 +2,220 @@ import prisma from "../database/postgres.js";
 
 
 export const recordTransaction = async (req, res) => {
-    // 1. Get the data from the request body
-    const { feedItemId, type, quantity, reference, notes, buyerName } = req.body;
+    try {
+        const { feedItemId, type, quantity, reference, notes, buyerName, items } = req.body;
 
-    // 2. Validate the inputs
-    if (!feedItemId || !type || quantity === undefined) {
-        return res.status(400).json({ error: "feedItemId, type (IN/OUT), and quantity are required." });
-    }
-
-    if (quantity <= 0) {
-        return res.status(400).json({ error: "Quantity must be greater than zero." });
-    }
-
-    if (type !== 'IN' && type !== 'OUT') {
-        return res.status(400).json({ error: "Transaction type must be 'IN' or 'OUT'." });
-    }
-
-    // 3. Look up the specific feed item
-    const feedItem = await prisma.feedItem.findUnique({
-        where: { id: feedItemId }
-    });
-
-    if (!feedItem) {
-        return res.status(404).json({ error: "Feed item not found." });
-    }
-
-    // 4. Calculate what the new stock level should be
-    let newStock = feedItem.currentStock;
-
-    if (type === 'IN') {
-        newStock += quantity;
-    } else if (type === 'OUT') {
-        if (!feedItem.pricePerUnit) {
-            return res.status(400).json({ error: "Cannot sell feed without a set price per unit. Please update the feed item first." });
+        if (!type || (type !== 'IN' && type !== 'OUT')) {
+            return res.status(400).json({ error: "Transaction type must be 'IN' or 'OUT'." });
         }
-        // Prevent staff from selling more than you actually have!
-        if (feedItem.currentStock < quantity) {
-            return res.status(400).json({
-                error: `Insufficient stock. You only have ${feedItem.currentStock} units of this feed available.`
+
+        // ── Handle INBOUND (Stock Addition) ──────────────────────────
+        if (type === 'IN') {
+            if (!feedItemId || quantity === undefined) {
+                return res.status(400).json({ error: "feedItemId and quantity are required for IN transactions." });
+            }
+
+            if (quantity <= 0) {
+                return res.status(400).json({ error: "Quantity must be greater than zero." });
+            }
+
+            const feedItem = await prisma.feedItem.findUnique({
+                where: { id: feedItemId }
+            });
+
+            if (!feedItem) {
+                return res.status(404).json({ error: "Feed item not found." });
+            }
+
+            const newStock = feedItem.currentStock + quantity;
+
+            const [newTransaction, updatedFeedItem] = await prisma.$transaction([
+                prisma.transaction.create({
+                    data: {
+                        feedItemId,
+                        userId: req.user.id,
+                        type: 'IN',
+                        quantity,
+                        reference,
+                        notes
+                    }
+                }),
+                prisma.feedItem.update({
+                    where: { id: feedItemId },
+                    data: { currentStock: newStock }
+                })
+            ]);
+
+            return res.status(201).json({
+                message: `Successfully recorded ${quantity} units IN.`,
+                transaction: newTransaction,
+                currentStock: updatedFeedItem.currentStock
             });
         }
-        newStock -= quantity;
-    }
 
-    // 5. Build transaction data
-    let transactionData = {
-        feedItemId,
-        userId: req.user.id, // We get this from your verifyToken middleware!
-        type,
-        quantity,
-        reference,
-        notes
-    };
-
-    if (type === 'OUT') {
-        // Generate receipt number: GGS-YYYY-XXXX
-        const year = new Date().getFullYear();
-        const salesCount = await prisma.sale.count({
-            where: { receiptNumber: { startsWith: `GGS-${year}-` } }
-        });
-        const sequence = String(salesCount + 1).padStart(4, '0');
-        const receiptNumber = `GGS-${year}-${sequence}`;
-
-        transactionData.sale = {
-            create: {
-                receiptNumber,
-                quantity,
-                unitPrice: feedItem.pricePerUnit,
-                totalPrice: Number(feedItem.pricePerUnit) * quantity,
-                buyerName,
-                notes,
-                feedItemId,
-                userId: req.user.id
+        // ── Handle OUTBOUND (Sale - Single or Multi-Item) ────────────
+        if (type === 'OUT') {
+            // Normalize line items: accept array `items` or single `feedItemId` + `quantity`
+            let lineItems = [];
+            if (Array.isArray(items) && items.length > 0) {
+                lineItems = items;
+            } else if (feedItemId && quantity !== undefined) {
+                lineItems = [{ feedItemId, quantity }];
+            } else {
+                return res.status(400).json({
+                    error: "For OUT transactions, provide an 'items' array or single 'feedItemId' and 'quantity'."
+                });
             }
-        };
+
+            // Validate each line item structure
+            for (let i = 0; i < lineItems.length; i++) {
+                const item = lineItems[i];
+                if (!item.feedItemId || item.quantity === undefined) {
+                    return res.status(400).json({
+                        error: `Line item at index ${i} is missing feedItemId or quantity.`
+                    });
+                }
+                if (item.quantity <= 0) {
+                    return res.status(400).json({
+                        error: `Quantity for line item at index ${i} must be greater than zero.`
+                    });
+                }
+            }
+
+            // Perform atomic validation, sale creation, and stock updates inside interactive $transaction
+            const result = await prisma.$transaction(async (tx) => {
+                // 1. Fetch all feed items involved
+                const feedIds = [...new Set(lineItems.map(item => item.feedItemId))];
+                const feedItems = await tx.feedItem.findMany({
+                    where: { id: { in: feedIds } }
+                });
+
+                const feedMap = new Map(feedItems.map(item => [item.id, item]));
+
+                // 2. Validate existence, pricing, and stock levels
+                // Track cumulative requested quantity per feed item to prevent overselling same item specified multiple times
+                const requestedQuantities = new Map();
+
+                for (const item of lineItems) {
+                    const feed = feedMap.get(item.feedItemId);
+                    if (!feed) {
+                        throw new Error(`FEED_NOT_FOUND:${item.feedItemId}`);
+                    }
+                    if (!feed.pricePerUnit) {
+                        throw new Error(`MISSING_PRICE:${feed.name}`);
+                    }
+
+                    const currentReq = requestedQuantities.get(item.feedItemId) || 0;
+                    const newReq = currentReq + item.quantity;
+                    requestedQuantities.set(item.feedItemId, newReq);
+
+                    if (feed.currentStock < newReq) {
+                        throw new Error(`INSUFFICIENT_STOCK:${feed.name}:${feed.currentStock}:${newReq}`);
+                    }
+                }
+
+                // 3. Generate receipt number: GGS-YYYY-XXXX
+                const year = new Date().getFullYear();
+                const salesCount = await tx.sale.count({
+                    where: { receiptNumber: { startsWith: `GGS-${year}-` } }
+                });
+                const sequence = String(salesCount + 1).padStart(4, '0');
+                const receiptNumber = `GGS-${year}-${sequence}`;
+
+                // 4. Build SaleItem data and calculate totals
+                let grandTotal = 0;
+                const saleItemsData = lineItems.map(item => {
+                    const feed = feedMap.get(item.feedItemId);
+                    const unitPrice = Number(feed.pricePerUnit);
+                    const lineTotal = unitPrice * item.quantity;
+                    grandTotal += lineTotal;
+
+                    return {
+                        feedItemId: item.feedItemId,
+                        quantity: item.quantity,
+                        unitPrice: feed.pricePerUnit,
+                        totalPrice: lineTotal
+                    };
+                });
+
+                // 5. Create Sale record with nested SaleItem entries
+                const sale = await tx.sale.create({
+                    data: {
+                        receiptNumber,
+                        totalPrice: grandTotal,
+                        buyerName,
+                        notes,
+                        userId: req.user.id,
+                        items: {
+                            create: saleItemsData
+                        }
+                    },
+                    include: {
+                        items: {
+                            include: {
+                                feedItem: {
+                                    select: { name: true }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // 6. Deduct stock and create Transaction entries for each line item
+                const createdTransactions = [];
+                for (const item of lineItems) {
+                    await tx.feedItem.update({
+                        where: { id: item.feedItemId },
+                        data: {
+                            currentStock: {
+                                decrement: item.quantity
+                            }
+                        }
+                    });
+
+                    const transaction = await tx.transaction.create({
+                        data: {
+                            feedItemId: item.feedItemId,
+                            userId: req.user.id,
+                            type: 'OUT',
+                            quantity: item.quantity,
+                            reference,
+                            notes,
+                            saleId: sale.id
+                        }
+                    });
+                    createdTransactions.push(transaction);
+                }
+
+                return { sale, transactions: createdTransactions };
+            });
+
+            return res.status(201).json({
+                message: `Successfully processed sale (${result.sale.items.length} item(s)).`,
+                sale: result.sale,
+                transactions: result.transactions
+            });
+        }
+    } catch (error) {
+        // Handle domain error messages thrown inside $transaction
+        if (error.message.startsWith('FEED_NOT_FOUND:')) {
+            const id = error.message.split(':')[1];
+            return res.status(404).json({ error: `Feed item not found: ${id}` });
+        }
+        if (error.message.startsWith('MISSING_PRICE:')) {
+            const name = error.message.split(':')[1];
+            return res.status(400).json({ error: `Cannot sell feed '${name}' without a set price per unit.` });
+        }
+        if (error.message.startsWith('INSUFFICIENT_STOCK:')) {
+            const [, name, available, requested] = error.message.split(':');
+            return res.status(400).json({
+                error: `Insufficient stock for '${name}'. Available: ${available}, Requested: ${requested}`
+            });
+        }
+
+        console.error("Error recording transaction:", error);
+        return res.status(500).json({ error: "Failed to record transaction." });
     }
-
-    // 6. Execute the Prisma Transaction
-    // Both of these commands execute together atomically
-    const [newTransaction, updatedFeedItem] = await prisma.$transaction([
-        // Action A: Record the transaction history (and Sale if OUT)
-        prisma.transaction.create({
-            data: transactionData,
-            include: { sale: true }
-        }),
-        // Action B: Update the actual stock number on the feed item
-        prisma.feedItem.update({
-            where: { id: feedItemId },
-            data: { currentStock: newStock }
-        })
-    ]);
-
-    // 7. Send the success response
-    res.status(201).json({
-        message: `Successfully recorded ${quantity} units ${type}.`,
-        transaction: newTransaction,
-        currentStock: updatedFeedItem.currentStock
-    });
 };
 
 export const getAllFeeds = async (req, res) => {

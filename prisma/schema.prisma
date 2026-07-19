@@ -56,7 +56,7 @@ model FeedItem {
   category     Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   transactions Transaction[]
-  sales        Sale[]      @relation("Sales")
+  saleItems    SaleItem[]
 }
 
 model Transaction {
@@ -73,7 +73,8 @@ model Transaction {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  sale   Sale?
+  saleId String?
+  sale   Sale?   @relation(fields: [saleId], references: [id], onDelete: SetNull)
 }
 
 enum TransactionType {
@@ -102,19 +103,27 @@ enum Role {
 model Sale {
   id            String   @id @default(uuid())
   receiptNumber String   @unique        // e.g. "GGS-2026-0001"
-  quantity      Int
-  unitPrice     Decimal                 // price at time of sale (snapshot)
-  totalPrice    Decimal                 // quantity × unitPrice
+  totalPrice    Decimal                 // grand total of all line items
   buyerName     String?                 // optional customer name
   notes         String?
   date          DateTime @default(now())
 
-  feedItemId    String
-  feedItem      FeedItem @relation("Sales", fields: [feedItemId], references: [id])
-
-  transactionId String   @unique        // links to the OUT Transaction
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
-
   userId        String
   user          User     @relation("UserSales", fields: [userId], references: [id])
+
+  items         SaleItem[]
+  transactions  Transaction[]
+}
+
+model SaleItem {
+  id         String   @id @default(uuid())
+  saleId     String
+  sale       Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  feedItemId String
+  feedItem   FeedItem @relation(fields: [feedItemId], references: [id])
+
+  quantity   Int
+  unitPrice  Decimal                 // price at time of sale (snapshot)
+  totalPrice Decimal                 // quantity * unitPrice
 }
